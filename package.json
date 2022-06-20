@@ -1,0 +1,14 @@
+{
+  "name": "mosh_data_structures_algorithms",
+  "version": "1.0.0",
+  "description": "",
+  "main": "customArray.js",
+  "scripts": {
+    "test": "jest --watch"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "jest": "^28.1.1"
+  }
+}

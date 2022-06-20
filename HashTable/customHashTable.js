@@ -38,6 +38,8 @@ Array is ordered, but it will have it's own properties.
 Object.create(null) gets rid of those extra keys, but how is it ordered? 
 By creating strings that won't convert to numbers as keys, this should be insertion order. 
 https://www.stefanjudis.com/today-i-learned/property-order-is-predictable-in-javascript-objects-since-es2015/
+
+https://stackoverflow.com/questions/28739745/how-to-make-an-iterator-out-of-an-es6-class
 */
 
 class HashTable {
@@ -47,8 +49,6 @@ class HashTable {
 		this.buckets = Object.create(null)
 		this.length = Object.keys(this.buckets).length
 		this.doubleHashingMode = doubleHashingMode
-		this.called = 0
-		this.inner = 0
 	}
 
 	[Symbol.iterator]() {
@@ -63,142 +63,84 @@ class HashTable {
 		}
 	}
 
-	newHashFunction(key) {
-		this.called++
-		const hash1 = this.unicodeSumOfKey(key) % this.size
-		if (!this.buckets[hash1]) {
-			this.buckets[hash1] = []
-			return hash1
-		}
-		this.inner++
-		let skip = 1
-		for (let i = 0; i < this.size - hash1; i++) {
-			console.log(hash1 + skip)
-			if (!this.buckets[hash1 + skip]) {
-				this.buckets[hash1 + skip] = []
-				return hash1 + skip
-			}
-			skip++
-		}
-	}
-
 	unicodeSumOfKey(key) {
 		return String(key)
 			.split('')
 			.reduce((res, c) => res + c.charCodeAt(0), 0)
 	}
 
-	hash(key) {
-		return this.doubleHashingMode
-			? this.doubleHash(key)
-			: this.hashQuadraticProbe(key)
+	hashModeSet() {
+		return this.doubleHashingMode ? this.doubleHash : this.hashQuadraticProbe
 	}
 
-	hash1 = (key) => {
+	hash(key) {
+		const hash = this.hash1(key)
+		const probe = this.hashModeSet()
+		if (this.buckets[hash]) {
+			if (this.buckets[hash][0] === key) return hash
+			for (let i = 0; i < this.size - hash; i++) {
+				const probeResult = probe(hash, i, key)
+				if (this.buckets[probeResult] && this.buckets[probeResult][0] === key)
+					return probeResult
+				if (!this.buckets[probeResult]) return probeResult
+			}
+		}
+		return hash
+	}
+
+	hash1(key) {
 		return this.unicodeSumOfKey(key) % this.size
 	}
 
-	hashQuadraticProbe(key) {
-		this.called++
-		const hash = this.hash1(key)
-		// if (!this.buckets[hash]) {
-		// 	this.buckets[hash] = []
-		// 	return hash
-		// }
-
-		// Missing logic.  SOmetimes you get the same index, and you do want to replace the value.
-		// if (this.buckets[hash]) {
-		// 	console.log(this.buckets[hash][0] === key)
-		// }
-
-		if (this.buckets[hash]) {
-			this.inner++
-			for (let i = 0; i < this.size - hash; i++) {
-				const probeAtIndex = (hash + i ** 2) % this.size
-				if (!this.buckets[probeAtIndex]) {
-					return probeAtIndex
-				}
-			}
-		}
-
-		return hash
+	hashQuadraticProbe = (hash1, i) => {
+		return (hash1 + i ** 2) % this.size
 	}
 
-	doubleHash(key) {
+	doubleHash = (hash1, i, key) => {
 		const hash2 = (key) => {
 			return this.prime - (this.unicodeSumOfKey(key) % this.prime)
 		}
-
-		const hash = this.hash1(key)
-
-		if (this.buckets[hash]) {
-			for (let i = 0; i < this.size; i++) {
-				const doubleHashed = (hash + i * hash2(key)) % this.size
-				if (!this.buckets[this.formatKey(doubleHashed)]) return doubleHashed
-			}
-		}
-		return hash
+		return (hash1 + i * hash2(key)) % this.size
 	}
 
-	formatKey(key) {
-		return String(`x${this.hash(key)}`)
+	hashedIndex(key) {
+		return this.hash(key)
 	}
 
 	get(key) {
-		const index = this.formatKey(key)
-		return this.buckets[index][1]
+		const index = this.hashedIndex(key)
+		return this.buckets[index] ? this.buckets[index][1] : undefined
 	}
 
 	set(key, value) {
 		if (this.length >= this.size)
 			throw new Error(`Map maximum size exceeded. Length ${this.length}`)
-		// Make the hashed key non-numerical string to order by insertion / chronological.
-		const index = this.hash(key)
+		const index = this.hashedIndex(key)
+		if (!this.buckets[index]) this.length++
 		this.buckets[index] = Object.freeze([key, value])
-		this.length++
+
 		return this
 	}
 
 	has(key) {
-		const index = hash(key)
-		return Boolean(this.content[index])
+		const index = this.hashedIndex(key)
+		return Boolean(this.buckets[index])
 	}
 
-	delete() {}
+	delete(key) {
+		if (!this.has(key)) return false
+		const index = this.hashedIndex(key)
+		delete this.buckets[index]
+		this.length--
+		return true
+	}
 
-	clear() {}
-
-	print() {
-		return this.buckets
+	clear() {
+		this.buckets = Object.create(null)
+		this.length = 0
 	}
 }
 
-/* 
-
-Create a set of 200 unique keys.
-Create a hashing function to find unique indices in a range.
-Create a set of these indices => Are there 200?
-
-*/
-
-const myMap = new HashTable()
-const myMapD = new HashTable(true)
-
-const myKeys = new Set()
-for (let i = 0; myKeys.size < 200; i++) {
-	myKeys.add(Math.random() * 100)
+module.exports = {
+	HashTable
 }
-
-const myIndices = new Set()
-const myIndicesD = new Set()
-for (let key of myKeys.values()) {
-	// myIndices.add(myMap.hash(key))
-	myMap.set(key, 'a generic value')
-}
-console.log('unique key set size', myKeys.size)
-// console.log('indices set size', myIndices.size)
-console.log('length in Map', Object.keys(myMap.buckets).length)
-console.log('called', myMap.called)
-console.log('inner', myMap.inner)
-// console.log(myIndicesD.size)
-
